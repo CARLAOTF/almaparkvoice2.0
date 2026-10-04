@@ -1,1 +1,0 @@
-# almaparkvoice2.0

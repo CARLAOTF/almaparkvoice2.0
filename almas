@@ -1,0 +1,247 @@
+-- [[ Auto Souls do Carlao + Anti-AFK ]] --
+
+local Players = game:GetService("Players")
+local CoreGui = game:GetService("CoreGui")
+local VirtualInputManager = game:GetService("VirtualInputManager") --[span_3](start_span)[span_3](end_span)
+local UserInputService = game:GetService("UserInputService") --[span_4](start_span)[span_4](end_span)
+local player = Players.LocalPlayer
+
+-- Remove a interface se ela já existir
+if CoreGui:FindFirstChild("CarlaoAutoSoulsUI") then
+    CoreGui.CarlaoAutoSoulsUI:Destroy()
+end
+
+getgenv().AutoFarmSouls = false
+local isAfkActive = false --[span_5](start_span)[span_5](end_span)
+local afkConnection = nil --[span_6](start_span)[span_6](end_span)
+
+-- Criação da Interface (GUI)
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "CarlaoAutoSoulsUI"
+ScreenGui.Parent = CoreGui
+
+local MainFrame = Instance.new("Frame")
+MainFrame.Size = UDim2.new(0, 270, 0, 310) -- Aumentado para caber o novo botão
+MainFrame.Position = UDim2.new(0.5, -135, 0.5, -155)
+MainFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
+MainFrame.BorderSizePixel = 0
+MainFrame.Active = true
+MainFrame.Draggable = true
+MainFrame.Parent = ScreenGui
+
+local UICorner = Instance.new("UICorner")
+UICorner.CornerRadius = UDim.new(0, 8)
+UICorner.Parent = MainFrame
+
+local Title = Instance.new("TextLabel")
+Title.Size = UDim2.new(1, 0, 0, 35)
+Title.BackgroundTransparency = 1
+Title.Text = "Auto Souls - Carlao"
+Title.TextColor3 = Color3.fromRGB(255, 255, 255)
+Title.TextSize = 16
+Title.Font = Enum.Font.GothamBold
+Title.Parent = MainFrame
+
+local CloseBtn = Instance.new("TextButton")
+CloseBtn.Size = UDim2.new(0, 30, 0, 30)
+CloseBtn.Position = UDim2.new(1, -35, 0, 2)
+CloseBtn.BackgroundColor3 = Color3.fromRGB(200, 60, 60)
+CloseBtn.Text = "X"
+CloseBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+CloseBtn.Font = Enum.Font.GothamBold
+CloseBtn.Parent = MainFrame
+Instance.new("UICorner", CloseBtn).CornerRadius = UDim.new(0, 6)
+
+-- Função auxiliar para criar as linhas de input
+local function criarInput(texto, valorPadrao, posY)
+    local Label = Instance.new("TextLabel")
+    Label.Size = UDim2.new(0.65, 0, 0, 30)
+    Label.Position = UDim2.new(0.05, 0, 0, posY)
+    Label.BackgroundTransparency = 1
+    Label.Text = texto
+    Label.TextColor3 = Color3.fromRGB(200, 200, 200)
+    Label.TextSize = 14
+    Label.Font = Enum.Font.Gotham
+    Label.TextXAlignment = Enum.TextXAlignment.Left
+    Label.Parent = MainFrame
+
+    local Input = Instance.new("TextBox")
+    Input.Size = UDim2.new(0.25, 0, 0, 30)
+    Input.Position = UDim2.new(0.7, 0, 0, posY)
+    Input.BackgroundColor3 = Color3.fromRGB(45, 45, 50)
+    Input.Text = valorPadrao
+    Input.TextColor3 = Color3.fromRGB(255, 255, 255)
+    Input.Font = Enum.Font.GothamBold
+    Input.TextSize = 14
+    Input.ClearTextOnFocus = false
+    Input.Parent = MainFrame
+    Instance.new("UICorner", Input).CornerRadius = UDim.new(0, 6)
+    
+    return Input
+end
+
+-- Campos de configuração[span_7](start_span)[span_7](end_span)
+local LimiteInput = criarInput("Limite falha (s):", "1", 45) --[span_8](start_span)[span_8](end_span)
+local DelayTpInput = criarInput("Delay do TP (s):", "0.5", 85) --[span_9](start_span)[span_9](end_span)
+local PassadasInput = criarInput("Qtd. Passadas:", "5", 125) --[span_10](start_span)[span_10](end_span)
+
+-- Botão do Anti-AFK[span_11](start_span)[span_11](end_span)
+local ToggleAfkBtn = Instance.new("TextButton")
+ToggleAfkBtn.Size = UDim2.new(0.9, 0, 0, 40)
+ToggleAfkBtn.Position = UDim2.new(0.05, 0, 0, 175)
+ToggleAfkBtn.BackgroundColor3 = Color3.fromRGB(220, 60, 60)
+ToggleAfkBtn.Text = "Ativar Anti-AFK"
+ToggleAfkBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+ToggleAfkBtn.TextSize = 15
+ToggleAfkBtn.Font = Enum.Font.GothamBold
+ToggleAfkBtn.Parent = MainFrame
+Instance.new("UICorner", ToggleAfkBtn).CornerRadius = UDim.new(0, 6)
+
+-- Botão de Toggle Farm
+local ToggleFarmBtn = Instance.new("TextButton")
+ToggleFarmBtn.Size = UDim2.new(0.9, 0, 0, 45)
+ToggleFarmBtn.Position = UDim2.new(0.05, 0, 0, 230)
+ToggleFarmBtn.BackgroundColor3 = Color3.fromRGB(60, 160, 60)
+ToggleFarmBtn.Text = "Iniciar Auto Coletar"
+ToggleFarmBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+ToggleFarmBtn.TextSize = 16
+ToggleFarmBtn.Font = Enum.Font.GothamBold
+ToggleFarmBtn.Parent = MainFrame
+Instance.new("UICorner", ToggleFarmBtn).CornerRadius = UDim.new(0, 6)
+
+-- ================================
+-- LÓGICA DO ANTI-AFK
+-- ================================
+local function antiAfkPulse() --[span_12](start_span)[span_12](end_span)
+    pcall(function()
+        VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.Unknown, false, game) --[span_13](start_span)[span_13](end_span)
+        VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.Unknown, false, game) --[span_14](start_span)[span_14](end_span)
+    end)
+    
+    pcall(function()
+        local position = UserInputService:GetMouseLocation() --[span_15](start_span)[span_15](end_span)
+        VirtualInputManager:SendMouseMoveEvent(position.X, position.Y, game) --[span_16](start_span)[span_16](end_span)
+    end)
+
+    local env = (getgenv and getgenv()) or _G --[span_17](start_span)[span_17](end_span)
+    local fire = env.firesignal or env.fireSignal --[span_18](start_span)[span_18](end_span)
+    if type(fire) == "function" then --[span_19](start_span)[span_19](end_span)
+        pcall(fire, UserInputService.WindowFocused) --[span_20](start_span)[span_20](end_span)
+    end
+end
+
+ToggleAfkBtn.MouseButton1Click:Connect(function()
+    isAfkActive = not isAfkActive --[span_21](start_span)[span_21](end_span)
+
+    if isAfkActive then
+        ToggleAfkBtn.Text = "Desativar Anti-AFK"
+        ToggleAfkBtn.BackgroundColor3 = Color3.fromRGB(60, 200, 60) --[span_22](start_span)[span_22](end_span)
+
+        afkConnection = Players.LocalPlayer.Idled:Connect(function() --[span_23](start_span)[span_23](end_span)
+            antiAfkPulse() --[span_24](start_span)[span_24](end_span)
+        end)
+    else
+        ToggleAfkBtn.Text = "Ativar Anti-AFK"
+        ToggleAfkBtn.BackgroundColor3 = Color3.fromRGB(220, 60, 60) --[span_25](start_span)[span_25](end_span)
+        
+        if afkConnection then --[span_26](start_span)[span_26](end_span)
+            afkConnection:Disconnect() --[span_27](start_span)[span_27](end_span)
+            afkConnection = nil --[span_28](start_span)[span_28](end_span)
+        end
+    end
+end)
+
+-- ================================
+-- LÓGICA DO AUTO FARM
+-- ================================
+local function iniciarFarm()
+    while getgenv().AutoFarmSouls do
+        local char = player.Character
+        if char and char:FindFirstChild("HumanoidRootPart") and char:FindFirstChildOfClass("Humanoid") then
+            local hrp = char.HumanoidRootPart
+            local humanoid = char:FindFirstChildOfClass("Humanoid")
+            local pastaSouls = workspace:FindFirstChild("SeasonalCollectibles")
+            
+            if pastaSouls then
+                for _, soul in ipairs(pastaSouls:GetChildren()) do
+                    if not getgenv().AutoFarmSouls then break end
+                    
+                    if string.match(soul.Name, "^Soul") then
+                        local targetCFrame
+                        if soul:IsA("BasePart") then
+                            targetCFrame = soul.CFrame
+                        elseif soul:IsA("Model") then
+                            local part = soul.PrimaryPart or soul:FindFirstChildWhichIsA("BasePart", true)
+                            if part then targetCFrame = part.CFrame end
+                        end
+                        
+                        if targetCFrame then
+                            local posFrente = (targetCFrame * CFrame.new(0, 0, 6)).Position
+                            local posTras = (targetCFrame * CFrame.new(0, 0, -6)).Position
+                            
+                            hrp.CFrame = CFrame.new(posFrente, targetCFrame.Position)
+                            task.wait(0.2)
+                            
+                            local maxWait = tonumber(LimiteInput.Text) or 1
+                            local passadas = tonumber(PassadasInput.Text) or 5
+                            local tpDelay = tonumber(DelayTpInput.Text) or 0.5
+                            
+                            for i = 1, passadas do
+                                if not getgenv().AutoFarmSouls or soul.Parent == nil then break end
+                                
+                                local destinoAtual = (i % 2 ~= 0) and posTras or posFrente
+                                humanoid:MoveTo(destinoAtual)
+                                
+                                local tempoGasto = 0
+                                while getgenv().AutoFarmSouls and soul.Parent ~= nil and tempoGasto < maxWait do
+                                    if (hrp.Position - destinoAtual).Magnitude < 1.5 then
+                                        break
+                                    end
+                                    task.wait(0.1)
+                                    tempoGasto = tempoGasto + 0.1
+                                end
+                            end
+                            
+                            humanoid:MoveTo(hrp.Position)
+                            
+                            if getgenv().AutoFarmSouls then
+                                task.wait(tpDelay)
+                            end
+                        end
+                    end
+                end
+            end
+        end
+        task.wait(0.5)
+    end
+end
+
+-- ================================
+-- EVENTOS DE FECHAR E INICIAR
+-- ================================
+ToggleFarmBtn.MouseButton1Click:Connect(function()
+    getgenv().AutoFarmSouls = not getgenv().AutoFarmSouls
+    
+    if getgenv().AutoFarmSouls then
+        ToggleFarmBtn.Text = "Parar Auto Coletar"
+        ToggleFarmBtn.BackgroundColor3 = Color3.fromRGB(200, 100, 40)
+        task.spawn(iniciarFarm)
+    else
+        ToggleFarmBtn.Text = "Iniciar Auto Coletar"
+        ToggleFarmBtn.BackgroundColor3 = Color3.fromRGB(60, 160, 60)
+        
+        local char = player.Character
+        if char and char:FindFirstChildOfClass("Humanoid") then
+            char:FindFirstChildOfClass("Humanoid"):MoveTo(char.HumanoidRootPart.Position)
+        end
+    end
+end)
+
+CloseBtn.MouseButton1Click:Connect(function()
+    getgenv().AutoFarmSouls = false
+    if afkConnection then --[span_29](start_span)[span_29](end_span)
+        afkConnection:Disconnect() --[span_30](start_span)[span_30](end_span)
+        afkConnection = nil --[span_31](start_span)[span_31](end_span)
+    end
+    ScreenGui:Destroy()
+end)
